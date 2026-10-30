@@ -5,7 +5,7 @@
    🔗Hugging Face Model Link : https://huggingface.co/pavisha-neuroscan/brain-tumor-classifier/tree/main 
 
    
-   🔗Live Demo Link :https://drive.google.com/file/d/1tqDfYjLW73SQff9b4jn3mKANN0dtj7Bn/view
+   🔗Live URL Link :https://neuroscan-ai-kxyfybxksmmddsszbz2nvu.streamlit.app/
 
    
 NeuroScan AI is a deep learning-based web application designed to classify brain MRI images using a VGG16-based Convolutional Neural Network (CNN). The system allows users to upload an MRI scan and receive a predicted tumour category along with the model's confidence score.
