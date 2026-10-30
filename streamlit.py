@@ -2,17 +2,16 @@ import streamlit as st
 import tensorflow as tf
 import numpy as np
 from PIL import Image
-import os
+from huggingface_hub import hf_hub_download
 
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
 
-MODEL_PATH = r"brain_tumor_vgg16_model.keras"
+MODEL_REPO_ID = "pavisha-neuroscan/brain-tumor-classifier"
+MODEL_FILENAME = "brain_tumor_vgg16_model.keras"
 
-# IMPORTANT:
-# This must match the class order used when training the model.
 ALL_CLASSES = [
     "glioma",
     "meningioma",
@@ -20,10 +19,9 @@ ALL_CLASSES = [
     "pituitary"
 ]
 
-# Use the same image size that was used during model training
 IMG_SIZE = (128, 128)
 
-# We don't want to display glioma in the final application
+# Glioma will not be displayed in the final application
 EXCLUDED_CLASS = "glioma"
 
 
@@ -214,18 +212,19 @@ st.markdown(
 
 
 # ============================================================
-# MODEL LOADING
+# MODEL LOADING FROM HUGGING FACE
 # ============================================================
 
 @st.cache_resource(show_spinner="Loading VGG16 model...")
 def load_model():
 
-    if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError(
-            f"Model file not found:\n{MODEL_PATH}"
-        )
+    model_path = hf_hub_download(
+        repo_id=MODEL_REPO_ID,
+        filename=MODEL_FILENAME,
+        repo_type="model"
+    )
 
-    model = tf.keras.models.load_model(MODEL_PATH)
+    model = tf.keras.models.load_model(model_path)
 
     return model
 
@@ -237,7 +236,6 @@ def load_model():
 try:
 
     model = load_model()
-
     model_loaded = True
 
 except Exception as e:
@@ -249,8 +247,8 @@ except Exception as e:
     st.code(str(e))
 
     st.info(
-        "Please check whether the MODEL_PATH points to "
-        "your .keras model file."
+        "Please check the Hugging Face model repository, "
+        "model filename, and TensorFlow compatibility."
     )
 
     st.stop()
@@ -263,7 +261,6 @@ except Exception as e:
 try:
 
     output_shape = model.output_shape
-
     output_units = output_shape[-1]
 
 except Exception:
@@ -283,8 +280,7 @@ if output_units is not None:
 
             Expected classes: {len(ALL_CLASSES)}
 
-            Current class order:
-            {ALL_CLASSES}
+            Current class order: {ALL_CLASSES}
             """
         )
 
@@ -319,26 +315,26 @@ with st.sidebar:
         - Streamlit
         - Pillow
         - NumPy
+        - Hugging Face
         """
     )
 
     st.markdown("---")
 
-    st.markdown("**Model**")
+    st.markdown("**Model Information**")
 
-    st.write("Local VGG16 `.keras` model")
+    st.write("VGG16 Keras Model")
 
     st.markdown("---")
 
     if model_loaded:
+
         st.success("✅ VGG16 Model Loaded")
 
-    st.caption(
-        "Model path:"
-    )
+    st.caption("Hugging Face Model Repository")
 
     st.code(
-        MODEL_PATH,
+        f"{MODEL_REPO_ID}/{MODEL_FILENAME}",
         language="text"
     )
 
@@ -375,7 +371,7 @@ left_col, right_col = st.columns(
 
 
 # ============================================================
-# LEFT COLUMN - UPLOAD
+# LEFT COLUMN - IMAGE UPLOAD
 # ============================================================
 
 with left_col:
@@ -391,9 +387,7 @@ with left_col:
 
         try:
 
-            image = Image.open(
-                uploaded_file
-            )
+            image = Image.open(uploaded_file)
 
             image = image.convert("RGB")
 
@@ -411,9 +405,7 @@ with left_col:
 
         except Exception as e:
 
-            st.error(
-                f"Error opening image: {e}"
-            )
+            st.error(f"Error opening image: {e}")
 
             classify_clicked = False
 
@@ -421,9 +413,7 @@ with left_col:
 
         classify_clicked = False
 
-        st.info(
-            "Upload an MRI scan to begin."
-        )
+        st.info("Upload an MRI scan to begin.")
 
 
 # ============================================================
@@ -436,27 +426,20 @@ with right_col:
 
     if uploaded_file is not None and classify_clicked:
 
-        with st.spinner(
-            "Analyzing MRI image..."
-        ):
+        with st.spinner("Analyzing MRI image..."):
 
             try:
 
-                # ------------------------------------------------
+                # --------------------------------------------
                 # IMAGE PREPROCESSING
-                # ------------------------------------------------
+                # --------------------------------------------
 
-                img_resized = image.resize(
-                    IMG_SIZE
-                )
+                img_resized = image.resize(IMG_SIZE)
 
-                img_array = np.array(
-                    img_resized
-                )
+                img_array = np.array(img_resized)
 
                 img_normalized = (
-                    img_array.astype("float32")
-                    / 255.0
+                    img_array.astype("float32") / 255.0
                 )
 
                 img_batch = np.expand_dims(
@@ -465,9 +448,9 @@ with right_col:
                 )
 
 
-                # ------------------------------------------------
+                # --------------------------------------------
                 # MODEL PREDICTION
-                # ------------------------------------------------
+                # --------------------------------------------
 
                 raw_predictions = model.predict(
                     img_batch,
@@ -475,9 +458,9 @@ with right_col:
                 )[0]
 
 
-                # ------------------------------------------------
+                # --------------------------------------------
                 # REMOVE GLIOMA
-                # ------------------------------------------------
+                # --------------------------------------------
 
                 masked = raw_predictions.copy()
 
@@ -486,9 +469,9 @@ with right_col:
                     masked[excluded_idx] = 0.0
 
 
-                # ------------------------------------------------
+                # --------------------------------------------
                 # NORMALIZE PROBABILITIES
-                # ------------------------------------------------
+                # --------------------------------------------
 
                 total = masked.sum()
 
@@ -498,38 +481,32 @@ with right_col:
 
                 else:
 
-                    probs = masked
+                    st.error("Unable to calculate prediction.")
+
+                    st.stop()
 
 
-                # ------------------------------------------------
+                # --------------------------------------------
                 # FIND PREDICTED CLASS
-                # ------------------------------------------------
+                # --------------------------------------------
 
-                pred_idx = int(
-                    np.argmax(probs)
-                )
+                pred_idx = int(np.argmax(probs))
 
-                pred_class = all_classes[
-                    pred_idx
-                ]
+                pred_class = all_classes[pred_idx]
 
-                confidence = (
-                    probs[pred_idx] * 100
-                )
+                confidence = probs[pred_idx] * 100
 
 
             except Exception as e:
 
-                st.error(
-                    f"❌ Prediction failed: {e}"
-                )
+                st.error(f"❌ Prediction failed: {e}")
 
                 st.stop()
 
 
-        # ========================================================
+        # ====================================================
         # RESULT CARD
-        # ========================================================
+        # ====================================================
 
         color = CLASS_COLORS.get(
             pred_class,
@@ -571,9 +548,9 @@ with right_col:
         )
 
 
-        # ========================================================
+        # ====================================================
         # CONFIDENCE
-        # ========================================================
+        # ====================================================
 
         st.metric(
             label="🎯 Confidence",
@@ -581,21 +558,17 @@ with right_col:
         )
 
 
-        # ========================================================
+        # ====================================================
         # PROBABILITY DISTRIBUTION
-        # ========================================================
+        # ====================================================
 
-        st.markdown(
-            "##### Probability Distribution"
-        )
+        st.markdown("##### Probability Distribution")
 
         prob_html = ""
 
         for name in display_classes:
 
-            idx = all_classes.index(
-                name
-            )
+            idx = all_classes.index(name)
 
             prob = probs[idx] * 100
 
@@ -641,16 +614,14 @@ with right_col:
     elif uploaded_file is not None:
 
         st.write(
-            "Click **🔍 Classify Scan** "
-            "to run the model."
+            "Click **🔍 Classify Scan** to run the model."
         )
 
 
     else:
 
         st.write(
-            "Results will appear here once "
-            "a scan is analyzed."
+            "Results will appear here once a scan is analyzed."
         )
 
 
